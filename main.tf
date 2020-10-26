@@ -20,7 +20,7 @@ provider "azurerm" {
 }
 
 resource "azurerm_resource_group" "RSG_tfsec" {
-  name     = "TF-Sec-Fail"
+  name     = "TF-Sec-Fail1"
   location = "Australia East"
 }
 
