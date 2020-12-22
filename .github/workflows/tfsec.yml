@@ -1,13 +1,16 @@
-name: Terraform Plan
-on:
-  pull_request:
-    branches: 
-      - main
-    
-jobs:
+name: 'Terraform - Test'
 
-  Terraform-Plan:
+on:
+  push:
+    branches:
+    - main
+  pull_request:
+
+jobs:
+  build:
+    name: 'Validate'
     runs-on: ubuntu-latest
+
     
     steps:
     - uses: actions/checkout@v2
@@ -28,16 +31,62 @@ jobs:
     - name: Terraform Validate
       id: validate
       run: terraform validate -no-color
-
+      
     - name: Terraform Plan
       id: plan
-      run: terraform plan -no-color
-      
-    - name: TF SAST
-      uses: reviewdog/action-tfsec@master
+      run: terraform plan -lock=false -input=false
+      continue-on-error: true
+
+    - name: Update Pull Request
+      uses: actions/github-script@0.9.0
+      if: github.event_name == 'pull_request'
+      env:
+        PLAN: "terraform\n${{ steps.plan.outputs.stdout }}"
       with:
-       github_token: ${{ secrets.github_token }}
-       working_directory: "." # Change working directory
-       reporter: github-pr-review # Change reporter
-       fail_on_error: "true" # Fail action if errors are found
-       filter_mode: "nofilter" # Check all files, not just the diff
+        github-token: ${{ secrets.GITHUB_TOKEN }}
+        script: |
+          const output = `#### Terraform Format and Style 🖌\`${{ steps.fmt.outcome }}\`
+          #### Terraform Initialization ⚙️\`${{ steps.init.outcome }}\`
+          #### Terraform Plan 📖\`${{ steps.plan.outcome }}\`
+          [Actions run](https://github.com/${process.env.GITHUB_REPOSITORY}/actions/runs/${process.env.GITHUB_RUN_ID})
+          Pusher: @${{ github.actor }}
+          Action: ${{ github.event_name }}`;
+          github.issues.createComment({
+            issue_number: context.issue.number,
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            body: output
+          })
+
+    - name: Terraform Plan Status
+      if: steps.plan.outcome == 'failure'
+      run: exit 1
+
+  deploy:
+    name: 'Deploy'
+    needs: build
+    environment: Production
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        shell: bash
+        working-directory: src
+
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v2
+
+    - name: Setup Terraform
+      uses: hashicorp/setup-terraform@v1
+      with:
+        cli_config_credentials_token: ${{ secrets.TF_API_TOKEN }}
+        terraform_version: 0.13.5
+
+    - name: Terraform Init
+      id: init
+      run: terraform init
+
+    - name: Terraform Apply
+      id: apply
+      run: terraform apply -auto-approve -input=false
