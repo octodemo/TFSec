@@ -1,4 +1,4 @@
-# TFSec
+# TFSec-FATEN!
 
 This Repository is used to demonstrate the capabilities of TFSEC https://github.com/tfsec/tfsec and how it can be integrated as part of a GitHub Action.
 
