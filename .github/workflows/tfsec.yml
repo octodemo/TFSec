@@ -37,56 +37,20 @@ jobs:
       run: terraform plan -lock=false -input=false
       continue-on-error: true
 
-    - name: Update Pull Request
-      uses: actions/github-script@0.9.0
-      if: github.event_name == 'pull_request'
-      env:
-        PLAN: "terraform\n${{ steps.plan.outputs.stdout }}"
+    - name: tfsec
+      uses: tfsec/tfsec-sarif-action@master
       with:
-        github-token: ${{ secrets.GITHUB_TOKEN }}
-        script: |
-          const output = `#### Terraform Format and Style 🖌\`${{ steps.fmt.outcome }}\`
-          #### Terraform Initialization ⚙️\`${{ steps.init.outcome }}\`
-          #### Terraform Plan 📖\`${{ steps.plan.outcome }}\`
-          [Actions run](https://github.com/${process.env.GITHUB_REPOSITORY}/actions/runs/${process.env.GITHUB_RUN_ID})
-          Pusher: @${{ github.actor }}
-          Action: ${{ github.event_name }}`;
-          github.issues.createComment({
-            issue_number: context.issue.number,
-            owner: context.repo.owner,
-            repo: context.repo.repo,
-            body: output
-          })
+          sarif_file: tfsec.sarif         
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Upload SARIF file
+      uses: github/codeql-action/upload-sarif@v1
+      with:
+          # Path to SARIF file relative to the root of the repository
+          sarif_file: tfsec.sarif         
 
     - name: Terraform Plan Status
       if: steps.plan.outcome == 'failure'
       run: exit 1
 
-  deploy:
-    name: 'Deploy'
-    needs: build
-    environment: Production
-    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
-    runs-on: ubuntu-latest
-    defaults:
-      run:
-        shell: bash
-        working-directory: src
-
-    steps:
-    - name: Checkout
-      uses: actions/checkout@v2
-
-    - name: Setup Terraform
-      uses: hashicorp/setup-terraform@v1
-      with:
-        cli_config_credentials_token: ${{ secrets.TF_API_TOKEN }}
-        terraform_version: 0.13.5
-
-    - name: Terraform Init
-      id: init
-      run: terraform init
-
-    - name: Terraform Apply
-      id: apply
-      run: terraform apply -auto-approve -input=false
+ 
